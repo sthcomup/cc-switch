@@ -86,7 +86,7 @@ export const handlers = [
           existingConfigs: [],
           appResults: [
             {
-              app: "company",
+              app: "quick_setup",
               status: "failed",
               message: "API key is required",
             },
@@ -117,21 +117,21 @@ export const handlers = [
 
       if (apps.includes("codex")) {
         addProvider("codex", {
-          id: "company-gateway",
-          name: "Company Gateway",
+          id: "quick-setup-gateway",
+          name: "Quick Setup Gateway",
           settingsConfig: {},
           category: "custom",
         });
-        setCurrentProviderId("codex", "company-gateway");
+        setCurrentProviderId("codex", "quick-setup-gateway");
       }
       if (apps.includes("opencode")) {
         addProvider("opencode", {
-          id: "company-gateway",
-          name: "Company Gateway",
+          id: "quick-setup-gateway",
+          name: "Quick Setup Gateway",
           settingsConfig: {},
           category: "custom",
         });
-        setLiveProviderIds("opencode", ["company-gateway"]);
+        setLiveProviderIds("opencode", ["quick-setup-gateway"]);
       }
 
       return success({
@@ -143,7 +143,7 @@ export const handlers = [
           message: `${app} configured`,
         })),
         warnings: [],
-        backupPath: "/mock/backups/company-quick-setup",
+        backupPath: "/mock/backups/quick-setup",
         restartRequiredApps: apps,
       });
     },

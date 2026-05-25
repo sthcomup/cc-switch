@@ -478,7 +478,7 @@ export function ProviderList({
           <Button variant="secondary" onClick={onQuickSetup}>
             <KeyRound className="mr-2 h-4 w-4" />
             {t("provider.companyQuickSetup", {
-              defaultValue: "公司一键配置",
+              defaultValue: "一键配置",
             })}
           </Button>
         </div>

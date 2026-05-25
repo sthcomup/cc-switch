@@ -990,7 +990,7 @@
     "deploymentType": "GitHub デプロイメントタイプ",
     "deploymentGitHubCom": "GitHub.com",
     "deploymentEnterprise": "GitHub Enterprise Server",
-    "enterpriseDomainPlaceholder": "例: company.ghe.com"
+    "enterpriseDomainPlaceholder": "例: ghe.example.com"
   },
   "codexOauth": {
     "authStatus": "認証状態",

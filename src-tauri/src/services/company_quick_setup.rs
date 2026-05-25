@@ -18,12 +18,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
-const COMPANY_PROVIDER_ID_CODEX: &str = "company-gateway";
-const COMPANY_PROVIDER_ID_OPENCODE: &str = "company-gateway";
-const COMPANY_PROVIDER_NAME: &str = "Company Gateway";
+const COMPANY_PROVIDER_ID_CODEX: &str = "quick-setup-gateway";
+const COMPANY_PROVIDER_ID_OPENCODE: &str = "quick-setup-gateway";
+const COMPANY_PROVIDER_NAME: &str = "Quick Setup Gateway";
 const DEFAULT_BASE_URL_DISPLAY: &str = "https://catcatcode.com/";
 const DEFAULT_MODEL: &str = "gpt-5.5";
-const CODEX_MODEL_PROVIDER_ID: &str = "company_gateway";
+const CODEX_MODEL_PROVIDER_ID: &str = "quick_setup_gateway";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -112,7 +112,7 @@ impl CompanyKeySetupResult {
             status: CompanySetupStatus::Failed,
             existing_configs: Vec::new(),
             app_results: vec![AppSetupResult {
-                app: "company".to_string(),
+                app: "quick_setup".to_string(),
                 status: CompanyAppSetupStatus::Failed,
                 message,
                 rollback_status: None,
@@ -153,15 +153,15 @@ impl CompanyQuickSetupService {
             .trim_end_matches('/')
             .to_string();
         let parsed = url::Url::parse(&raw)
-            .map_err(|e| AppError::Message(format!("Invalid company gateway URL: {e}")))?;
+            .map_err(|e| AppError::Message(format!("Invalid gateway URL: {e}")))?;
         if parsed.scheme() != "http" && parsed.scheme() != "https" {
             return Err(AppError::Message(
-                "Company gateway URL must start with http:// or https://".to_string(),
+                "Gateway URL must start with http:// or https://".to_string(),
             ));
         }
         if parsed.query().is_some() || parsed.fragment().is_some() {
             return Err(AppError::Message(
-                "Company gateway URL must not contain query or fragment".to_string(),
+                "Gateway URL must not contain query or fragment".to_string(),
             ));
         }
         let path = parsed.path().trim_end_matches('/');
@@ -177,7 +177,15 @@ impl CompanyQuickSetupService {
         request: CompanyKeySetupRequest,
     ) -> Result<CompanyKeySetupResult, AppError> {
         let api_key = request.api_key.trim().to_string();
+        log::info!(
+            "[QuickSetup] service started mode={:?} confirm_overwrite={} resolve_env_conflicts={} api_key_len={}",
+            request.mode,
+            request.confirm_overwrite,
+            request.resolve_user_env_conflicts,
+            api_key.len()
+        );
         if api_key.is_empty() {
+            log::warn!("[QuickSetup] rejected empty API key");
             return Ok(CompanyKeySetupResult::failed(
                 "API key is required".to_string(),
             ));
@@ -193,19 +201,34 @@ impl CompanyQuickSetupService {
         let base_url = Self::normalize_base_url(request.base_url.as_deref())?;
         let apps = match Self::resolve_apps(request.apps) {
             Ok(apps) => apps,
-            Err(message) => return Ok(CompanyKeySetupResult::failed(message)),
+            Err(message) => {
+                log::warn!("[QuickSetup] unsupported app selection: {message}");
+                return Ok(CompanyKeySetupResult::failed(message));
+            }
         };
+        log::info!(
+            "[QuickSetup] resolved target apps={:?} base_url={} model={}",
+            apps,
+            base_url,
+            model
+        );
 
+        log::info!("[QuickSetup] validating API key");
         if let Err(error) = Self::validate_company_key(&api_key, &base_url, &model).await {
-            return Ok(CompanyKeySetupResult::failed(Self::sanitize_message(
-                &error.to_string(),
-                &api_key,
-            )));
+            let sanitized = Self::sanitize_message(&error.to_string(), &api_key);
+            log::warn!("[QuickSetup] validation failed: {sanitized}");
+            return Ok(CompanyKeySetupResult::failed(sanitized));
         }
+        log::info!("[QuickSetup] validation succeeded");
 
         let existing_configs = Self::detect_existing_configs(state, &apps)?;
+        log::info!(
+            "[QuickSetup] detected existing configs count={}",
+            existing_configs.len()
+        );
         let needs_confirmation = !existing_configs.is_empty();
         if needs_confirmation && !request.confirm_overwrite {
+            log::info!("[QuickSetup] waiting for overwrite confirmation");
             return Ok(CompanyKeySetupResult {
                 status: CompanySetupStatus::NeedsConfirmation,
                 existing_configs,
@@ -224,25 +247,40 @@ impl CompanyQuickSetupService {
             });
         }
 
+        log::info!("[QuickSetup] capturing database snapshot");
         let db_snapshot = Self::capture_db_snapshot(state)?;
+        log::info!("[QuickSetup] backing up live config files");
         let backup_snapshot = Self::backup_live_files(&apps)?;
         let backup_path = Some(backup_snapshot.dir.to_string_lossy().to_string());
+        log::info!("[QuickSetup] backup created at {:?}", backup_path);
 
         let mut warnings = Vec::new();
         if request.resolve_user_env_conflicts {
+            log::info!("[QuickSetup] resolving user env conflicts");
             match Self::delete_resolvable_env_conflicts() {
-                Ok(Some(path)) => warnings.push(format!("env_backup:{path}")),
-                Ok(None) => {}
-                Err(err) => warnings.push(format!("env_cleanup_failed:{}", err)),
+                Ok(Some(path)) => {
+                    log::info!("[QuickSetup] env conflicts removed backup={path}");
+                    warnings.push(format!("env_backup:{path}"));
+                }
+                Ok(None) => log::info!("[QuickSetup] no resolvable env conflicts found"),
+                Err(err) => {
+                    log::warn!("[QuickSetup] env cleanup failed: {err}");
+                    warnings.push(format!("env_cleanup_failed:{}", err));
+                }
             }
         }
 
+        log::info!("[QuickSetup] applying providers");
         let apply_result = Self::apply_company_providers(state, &apps, &api_key, &base_url, &model);
         match apply_result {
             Ok(mut app_results) => {
                 for result in &mut app_results {
                     result.message = Self::sanitize_message(&result.message, &api_key);
                 }
+                log::info!(
+                    "[QuickSetup] configured successfully apps={:?}",
+                    apps.iter().map(|app| app.as_str()).collect::<Vec<_>>()
+                );
                 Ok(CompanyKeySetupResult {
                     status: CompanySetupStatus::Configured,
                     existing_configs,
@@ -256,6 +294,8 @@ impl CompanyQuickSetupService {
                 })
             }
             Err(err) => {
+                let sanitized_error = Self::sanitize_message(&err.to_string(), &api_key);
+                log::error!("[QuickSetup] apply failed: {sanitized_error}");
                 let file_rollback = Self::restore_live_files(&backup_snapshot.files);
                 let db_rollback = Self::restore_db_snapshot(state, db_snapshot);
                 let rollback_status = match (file_rollback, db_rollback) {
@@ -270,13 +310,14 @@ impl CompanyQuickSetupService {
                             .unwrap_or_else(|| "ok".to_string())
                     ),
                 };
+                log::warn!("[QuickSetup] rollback status={rollback_status}");
                 Ok(CompanyKeySetupResult {
                     status: CompanySetupStatus::Failed,
                     existing_configs,
                     app_results: vec![AppSetupResult {
-                        app: "company".to_string(),
+                        app: "quick_setup".to_string(),
                         status: CompanyAppSetupStatus::Failed,
-                        message: Self::sanitize_message(&err.to_string(), &api_key),
+                        message: sanitized_error,
                         rollback_status: Some(rollback_status),
                     }],
                     warnings,
@@ -295,7 +336,7 @@ impl CompanyQuickSetupService {
         for app in &apps {
             if !matches!(app, AppType::Codex | AppType::OpenCode) {
                 return Err(format!(
-                    "Company quick setup currently supports codex and opencode only, got {}",
+                    "Quick setup currently supports codex and opencode only, got {}",
                     app.as_str()
                 ));
             }
@@ -400,7 +441,7 @@ impl CompanyQuickSetupService {
                 configs.push(ExistingConfig {
                     app: "opencode".to_string(),
                     kind: "provider".to_string(),
-                    label: "OpenCode company-gateway provider exists".to_string(),
+                    label: "OpenCode quick-setup-gateway provider exists".to_string(),
                     action: "backupAndOverwrite".to_string(),
                     source: None,
                     resolvable: true,
@@ -445,7 +486,7 @@ impl CompanyQuickSetupService {
     fn backup_live_files(apps: &[AppType]) -> Result<BackupSnapshot, AppError> {
         let backup_dir = get_app_config_dir()
             .join("backups")
-            .join("company-quick-setup")
+            .join("quick-setup")
             .join(chrono::Utc::now().format("%Y%m%d%H%M%S%3f").to_string());
         fs::create_dir_all(&backup_dir).map_err(|e| AppError::io(&backup_dir, e))?;
 
@@ -601,7 +642,7 @@ impl CompanyQuickSetupService {
 model_provider = "{CODEX_MODEL_PROVIDER_ID}"
 
 [model_providers.{CODEX_MODEL_PROVIDER_ID}]
-name = "Company Gateway"
+name = "Quick Setup Gateway"
 base_url = "{base_url}"
 wire_api = "responses"
 requires_openai_auth = true
@@ -676,7 +717,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalizes_company_gateway_to_v1() {
+    fn normalizes_gateway_to_v1() {
         assert_eq!(
             CompanyQuickSetupService::normalize_base_url(Some("https://catcatcode.com/")).unwrap(),
             "https://catcatcode.com/v1"
@@ -693,7 +734,7 @@ mod tests {
     }
 
     #[test]
-    fn codex_provider_uses_company_defaults() {
+    fn codex_provider_uses_quick_setup_defaults() {
         let provider = CompanyQuickSetupService::build_codex_provider(
             "sk-secret",
             "https://catcatcode.com/v1",

@@ -154,7 +154,7 @@ export const CopilotAuthSection: React.FC<CopilotAuthSectionProps> = ({
           <Input
             placeholder={t(
               "copilot.enterpriseDomainPlaceholder",
-              "例如：company.ghe.com",
+              "例如：ghe.example.com",
             )}
             value={enterpriseDomain}
             onChange={(e) => setEnterpriseDomain(e.target.value)}

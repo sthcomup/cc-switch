@@ -17,6 +17,8 @@ interface FullScreenPanelProps {
   onClose: () => void;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  actions?: React.ReactNode;
+  showBackButton?: boolean;
 }
 
 const DRAG_BAR_HEIGHT = isWindows() || isLinux() ? 0 : 28; // px - match App.tsx
@@ -33,6 +35,8 @@ export const FullScreenPanel: React.FC<FullScreenPanelProps> = ({
   onClose,
   children,
   footer,
+  actions,
+  showBackButton = true,
 }) => {
   React.useEffect(() => {
     if (isOpen) {
@@ -118,19 +122,29 @@ export const FullScreenPanel: React.FC<FullScreenPanelProps> = ({
               {...DRAG_REGION_ATTR}
               style={{ ...DRAG_REGION_STYLE } as React.CSSProperties}
             >
-              <Button
-                type="button"
-                variant="outline"
-                size="icon"
-                onClick={onClose}
-                className="rounded-lg select-none"
-                style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
+              {showBackButton && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={onClose}
+                  className="rounded-lg select-none"
+                  style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+              )}
               <h2 className="text-lg font-semibold text-foreground select-none">
                 {title}
               </h2>
+              {actions && (
+                <div
+                  className="ml-auto flex items-center gap-2"
+                  style={{ WebkitAppRegion: "no-drag" } as React.CSSProperties}
+                >
+                  {actions}
+                </div>
+              )}
             </div>
           </div>
 

@@ -151,7 +151,7 @@
     "namePlaceholder": "例如：Claude 官方",
     "websiteUrl": "官网链接",
     "notes": "备注",
-    "notesPlaceholder": "例如：公司专用账号",
+    "notesPlaceholder": "例如：备用账号",
     "configJson": "配置 JSON",
     "writeCommonConfig": "写入通用配置",
     "editCommonConfigButton": "编辑通用配置",
@@ -990,7 +990,7 @@
     "deploymentType": "GitHub 部署类型",
     "deploymentGitHubCom": "GitHub.com",
     "deploymentEnterprise": "GitHub Enterprise Server",
-    "enterpriseDomainPlaceholder": "例如：company.ghe.com"
+    "enterpriseDomainPlaceholder": "例如：ghe.example.com"
   },
   "codexOauth": {
     "authStatus": "认证状态",

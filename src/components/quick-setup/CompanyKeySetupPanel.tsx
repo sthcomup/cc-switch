@@ -24,6 +24,9 @@ interface CompanyKeySetupPanelProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onConfigured?: () => void;
+  mode?: "panel" | "onboarding";
+  onSkip?: () => void;
+  onDone?: () => void;
 }
 
 const DEFAULT_BASE_URL = "https://catcatcode.com/";
@@ -31,10 +34,21 @@ const DEFAULT_MODEL = "gpt-5.5";
 
 type Step = "input" | "applying" | "needsConfirmation" | "success" | "failed";
 
+const describeApiKey = (value: string) => {
+  const trimmed = value.trim();
+  return {
+    length: trimmed.length,
+    suffix: trimmed.length > 4 ? trimmed.slice(-4) : "",
+  };
+};
+
 export function CompanyKeySetupPanel({
   open,
   onOpenChange,
   onConfigured,
+  mode = "panel",
+  onSkip,
+  onDone,
 }: CompanyKeySetupPanelProps) {
   const { t } = useTranslation();
   const [apiKey, setApiKey] = useState("");
@@ -55,6 +69,7 @@ export function CompanyKeySetupPanel({
   }, [includeCodex, includeOpenCode]);
 
   const closePanel = () => {
+    console.info("[QuickSetup][Panel] close requested", { mode, step });
     if (step === "applying") {
       const shouldClose = window.confirm(
         t("companyQuickSetup.closeWhileApplying", {
@@ -63,10 +78,16 @@ export function CompanyKeySetupPanel({
       );
       if (!shouldClose) return;
     }
+    if (mode === "onboarding" && onSkip) {
+      console.info("[QuickSetup][Panel] onboarding skipped");
+      onSkip();
+      return;
+    }
     onOpenChange(false);
   };
 
   const resetForRetry = () => {
+    console.info("[QuickSetup][Panel] reset for retry");
     setStep("input");
     setResult(null);
   };
@@ -76,7 +97,7 @@ export function CompanyKeySetupPanel({
     if (!trimmedKey) {
       toast.error(
         t("companyQuickSetup.apiKeyRequired", {
-          defaultValue: "请先粘贴公司 API Key",
+          defaultValue: "请先粘贴 API Key",
         }),
       );
       return;
@@ -90,6 +111,16 @@ export function CompanyKeySetupPanel({
       return;
     }
 
+    console.info("[QuickSetup][Panel] submit", {
+      mode,
+      confirmOverwrite,
+      setupMode: customOpen ? "custom" : "default",
+      apps: selectedApps,
+      baseUrl: customOpen ? baseUrl : DEFAULT_BASE_URL,
+      model: customOpen ? model : DEFAULT_MODEL,
+      resolveUserEnvConflicts,
+      apiKey: describeApiKey(trimmedKey),
+    });
     setStep("applying");
     setResult(null);
     try {
@@ -102,27 +133,46 @@ export function CompanyKeySetupPanel({
         confirmOverwrite,
         resolveUserEnvConflicts,
       });
+      console.info("[QuickSetup][Panel] response", {
+        status: response.status,
+        appResults: response.appResults.map((item) => ({
+          app: item.app,
+          status: item.status,
+          message: item.message,
+          rollbackStatus: item.rollbackStatus,
+        })),
+        existingConfigs: response.existingConfigs.length,
+        warnings: response.warnings,
+        backupPath: response.backupPath,
+        restartRequiredApps: response.restartRequiredApps,
+      });
       setResult(response);
       if (response.status === "needsConfirmation") {
+        console.info("[QuickSetup][Panel] needs confirmation", {
+          existingConfigs: response.existingConfigs,
+        });
         setStep("needsConfirmation");
       } else if (response.status === "configured") {
+        console.info("[QuickSetup][Panel] configured successfully");
         setStep("success");
         toast.success(
           t("companyQuickSetup.successToast", {
-            defaultValue: "公司供应商已配置，请打开新终端后使用。",
+            defaultValue: "供应商已配置，请打开新终端后使用。",
           }),
         );
         onConfigured?.();
       } else {
+        console.warn("[QuickSetup][Panel] setup failed", response);
         setStep("failed");
       }
     } catch (error) {
+      console.error("[QuickSetup][Panel] invoke failed", error);
       setResult({
         status: "failed",
         existingConfigs: [],
         appResults: [
           {
-            app: "company",
+            app: "quick_setup",
             status: "failed",
             message: error instanceof Error ? error.message : String(error),
           },
@@ -151,7 +201,7 @@ export function CompanyKeySetupPanel({
           </Button>
           <Button onClick={() => void submit(true)}>
             {t("companyQuickSetup.confirm", {
-              defaultValue: "确认改为公司配置",
+              defaultValue: "确认改为一键配置",
             })}
           </Button>
         </>
@@ -171,23 +221,70 @@ export function CompanyKeySetupPanel({
         </>
       )}
       {step === "success" && (
-        <Button onClick={() => onOpenChange(false)}>
-          {t("common.done", { defaultValue: "完成" })}
+        <Button onClick={() => (onDone ? onDone() : onOpenChange(false))}>
+          {mode === "onboarding"
+            ? t("companyQuickSetup.enterApp", {
+                defaultValue: "进入配置管理",
+              })
+            : t("common.done", { defaultValue: "完成" })}
         </Button>
       )}
     </>
   );
 
+  const actions =
+    mode === "onboarding" ? (
+      <Button variant="secondary" onClick={closePanel}>
+        {t("companyQuickSetup.skip", { defaultValue: "跳过" })}
+      </Button>
+    ) : undefined;
+
   return (
     <FullScreenPanel
       isOpen={open}
       title={t("companyQuickSetup.title", {
-        defaultValue: "公司一键配置",
+        defaultValue: "一键配置",
       })}
       onClose={closePanel}
       footer={footer}
+      actions={actions}
+      showBackButton={mode !== "onboarding"}
     >
       <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+        {mode === "onboarding" && (
+          <section className="rounded-xl border border-border bg-muted/20 p-5">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-base font-semibold">
+                  {t("companyQuickSetup.onboardingTitle", {
+                    defaultValue: "先完成 API Key 配置",
+                  })}
+                </h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {t("companyQuickSetup.onboardingDescription", {
+                    defaultValue:
+                      "验证通过后会自动写入 Codex 和 OpenCode，完成后回到原本的配置管理页面。",
+                  })}
+                </p>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                <div className="rounded-lg border border-border bg-background px-3 py-2 text-center">
+                  {t("companyQuickSetup.stepKey", { defaultValue: "粘贴 Key" })}
+                </div>
+                <div className="rounded-lg border border-border bg-background px-3 py-2 text-center">
+                  {t("companyQuickSetup.stepValidate", {
+                    defaultValue: "验证",
+                  })}
+                </div>
+                <div className="rounded-lg border border-border bg-background px-3 py-2 text-center">
+                  {t("companyQuickSetup.stepApply", {
+                    defaultValue: "生效",
+                  })}
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
         <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
           <div className="flex items-start gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -212,19 +309,19 @@ export function CompanyKeySetupPanel({
           {(step === "input" || step === "applying") && (
             <div className="mt-5 space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="company-api-key">
+                <Label htmlFor="quick-setup-api-key">
                   {t("companyQuickSetup.apiKeyLabel", {
-                    defaultValue: "公司 API Key",
+                    defaultValue: "API Key",
                   })}
                 </Label>
                 <Input
-                  id="company-api-key"
+                  id="quick-setup-api-key"
                   type="password"
                   value={apiKey}
                   disabled={step === "applying"}
                   onChange={(event) => setApiKey(event.target.value)}
                   placeholder={t("companyQuickSetup.apiKeyPlaceholder", {
-                    defaultValue: "粘贴公司 API Key",
+                    defaultValue: "粘贴 API Key",
                   })}
                 />
               </div>
@@ -262,25 +359,25 @@ export function CompanyKeySetupPanel({
                     OpenCode
                   </label>
                   <div className="space-y-2 sm:col-span-2">
-                    <Label htmlFor="company-base-url">
+                    <Label htmlFor="quick-setup-base-url">
                       {t("companyQuickSetup.baseUrl", {
-                        defaultValue: "公司网关地址",
+                        defaultValue: "网关地址",
                       })}
                     </Label>
                     <Input
-                      id="company-base-url"
+                      id="quick-setup-base-url"
                       value={baseUrl}
                       onChange={(event) => setBaseUrl(event.target.value)}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="company-model">
+                    <Label htmlFor="quick-setup-model">
                       {t("companyQuickSetup.model", {
                         defaultValue: "默认模型",
                       })}
                     </Label>
                     <Input
-                      id="company-model"
+                      id="quick-setup-model"
                       value={model}
                       onChange={(event) => setModel(event.target.value)}
                     />
@@ -386,7 +483,7 @@ function stepTitle(step: Step, t: ReturnType<typeof useTranslation>["t"]) {
       });
     default:
       return t("companyQuickSetup.inputTitle", {
-        defaultValue: "粘贴公司 API Key",
+        defaultValue: "粘贴 API Key",
       });
   }
 }
@@ -403,12 +500,11 @@ function stepDescription(
       });
     case "needsConfirmation":
       return t("companyQuickSetup.confirmDescription", {
-        defaultValue: "确认后会先备份旧配置，再写入公司配置。",
+        defaultValue: "确认后会先备份旧配置，再写入一键配置。",
       });
     case "success":
       return t("companyQuickSetup.successDescription", {
-        defaultValue:
-          "公司供应商已配置到 Codex 和 OpenCode，请打开新终端后使用。",
+        defaultValue: "供应商已配置到 Codex 和 OpenCode，请打开新终端后使用。",
       });
     case "failed":
       return t("companyQuickSetup.failedDescription", {

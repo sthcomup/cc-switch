@@ -161,6 +161,19 @@ const getInitialView = (): View => {
   return "providers";
 };
 
+const COMPANY_QUICK_SETUP_ONBOARDING_KEY =
+  "cc-switch-quick-setup-onboarding-v2-completed";
+
+const getInitialCompanyOnboardingOpen = (): boolean =>
+  localStorage.getItem(COMPANY_QUICK_SETUP_ONBOARDING_KEY) !== "true";
+
+const logCompanyOnboarding = (
+  message: string,
+  details?: Record<string, unknown>,
+) => {
+  console.info(`[QuickSetup][Onboarding] ${message}`, details ?? {});
+};
+
 function App() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -172,13 +185,37 @@ function App() {
   const [settingsDefaultTab, setSettingsDefaultTab] = useState("general");
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isCompanySetupOpen, setIsCompanySetupOpen] = useState(false);
+  const [isCompanyOnboardingOpen, setIsCompanyOnboardingOpen] = useState(
+    getInitialCompanyOnboardingOpen,
+  );
+  const [
+    handledCompanyOnboardingThisSession,
+    setHandledCompanyOnboardingThisSession,
+  ] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(VIEW_STORAGE_KEY, currentView);
   }, [currentView]);
 
+  useEffect(() => {
+    logCompanyOnboarding("startup decision", {
+      storageKey: COMPANY_QUICK_SETUP_ONBOARDING_KEY,
+      storedValue: localStorage.getItem(COMPANY_QUICK_SETUP_ONBOARDING_KEY),
+      open: isCompanyOnboardingOpen,
+    });
+  }, []);
+
   const { data: settingsData } = useSettingsQuery();
+
+  useEffect(() => {
+    logCompanyOnboarding("settings query updated", {
+      loaded: Boolean(settingsData),
+      firstRunNoticeConfirmed: settingsData?.firstRunNoticeConfirmed,
+      visibleApps: settingsData?.visibleApps,
+    });
+  }, [settingsData]);
+
   const useAppWindowControls =
     isLinux() && (settingsData?.useAppWindowControls ?? false);
   const dragBarHeight = useAppWindowControls ? 32 : DEFAULT_DRAG_BAR_HEIGHT;
@@ -202,6 +239,48 @@ function App() {
     if (visibleApps.openclaw) return "openclaw";
     if (visibleApps.hermes) return "hermes";
     return "claude"; // fallback
+  };
+
+  const getCompanySetupLandingApp = (): AppId => {
+    if (visibleApps.codex) return "codex";
+    if (visibleApps.opencode) return "opencode";
+    return getFirstVisibleApp();
+  };
+
+  const markCompanyOnboardingCompleted = async () => {
+    logCompanyOnboarding("mark completed", {
+      hasSettings: Boolean(settingsData),
+      firstRunNoticeConfirmed: settingsData?.firstRunNoticeConfirmed,
+    });
+    localStorage.setItem(COMPANY_QUICK_SETUP_ONBOARDING_KEY, "true");
+    setHandledCompanyOnboardingThisSession(true);
+
+    if (!settingsData || settingsData.firstRunNoticeConfirmed === true) {
+      logCompanyOnboarding("settings save skipped", {
+        reason: !settingsData ? "settings-not-loaded" : "already-confirmed",
+      });
+      return;
+    }
+
+    try {
+      const { webdavSync: _, ...rest } = settingsData;
+      await settingsApi.save({ ...rest, firstRunNoticeConfirmed: true });
+      await queryClient.invalidateQueries({ queryKey: ["settings"] });
+      logCompanyOnboarding("settings saved");
+    } catch (error) {
+      console.error("Failed to save quick setup onboarding state:", error);
+    }
+  };
+
+  const finishCompanyOnboarding = () => {
+    const landingApp = getCompanySetupLandingApp();
+    logCompanyOnboarding("finish and enter app", { landingApp });
+    void markCompanyOnboardingCompleted();
+    setIsCompanyOnboardingOpen(false);
+    setIsCompanySetupOpen(false);
+    setCurrentView("providers");
+    setActiveApp(landingApp);
+    localStorage.setItem(STORAGE_KEY, landingApp);
   };
 
   useEffect(() => {
@@ -1602,13 +1681,30 @@ function App() {
       />
 
       <CompanyKeySetupPanel
-        open={isCompanySetupOpen}
-        onOpenChange={setIsCompanySetupOpen}
+        open={isCompanySetupOpen || isCompanyOnboardingOpen}
+        mode={isCompanyOnboardingOpen ? "onboarding" : "panel"}
+        onOpenChange={(open) => {
+          logCompanyOnboarding("panel open change", {
+            open,
+            onboarding: isCompanyOnboardingOpen,
+          });
+          if (isCompanyOnboardingOpen && !open) {
+            finishCompanyOnboarding();
+            return;
+          }
+          setIsCompanySetupOpen(open);
+        }}
+        onSkip={finishCompanyOnboarding}
+        onDone={isCompanyOnboardingOpen ? finishCompanyOnboarding : undefined}
         onConfigured={() => {
           void queryClient.invalidateQueries({ queryKey: ["providers"] });
           void queryClient.invalidateQueries({
             queryKey: ["opencodeLiveProviderIds"],
           });
+          if (isCompanyOnboardingOpen) {
+            logCompanyOnboarding("configured during onboarding");
+            void markCompanyOnboardingCompleted();
+          }
         }}
       />
 
@@ -1685,7 +1781,9 @@ function App() {
       />
 
       <DeepLinkImportDialog />
-      <FirstRunNoticeDialog />
+      {!isCompanyOnboardingOpen && !handledCompanyOnboardingThisSession && (
+        <FirstRunNoticeDialog />
+      )}
     </div>
   );
 }

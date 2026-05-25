@@ -41,7 +41,7 @@ export function ProviderEmptyState({
           <Button onClick={onQuickSetup}>
             <KeyRound className="mr-2 h-4 w-4" />
             {t("provider.companyQuickSetup", {
-              defaultValue: "使用公司 API Key 配置",
+              defaultValue: "使用 API Key 一键配置",
             })}
           </Button>
         )}

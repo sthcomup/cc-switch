@@ -2002,55 +2002,55 @@ mod tests {
         // 基本用法
         assert_eq!(normalize_github_domain("github.com").unwrap(), "github.com");
         assert_eq!(
-            normalize_github_domain("company.ghe.com").unwrap(),
-            "company.ghe.com"
+            normalize_github_domain("ghe.example.com").unwrap(),
+            "ghe.example.com"
         );
 
         // 剥离协议
         assert_eq!(
-            normalize_github_domain("https://company.ghe.com").unwrap(),
-            "company.ghe.com"
+            normalize_github_domain("https://ghe.example.com").unwrap(),
+            "ghe.example.com"
         );
         assert_eq!(
-            normalize_github_domain("http://company.ghe.com").unwrap(),
-            "company.ghe.com"
+            normalize_github_domain("http://ghe.example.com").unwrap(),
+            "ghe.example.com"
         );
 
         // 小写化
         assert_eq!(normalize_github_domain("GitHub.COM").unwrap(), "github.com");
         assert_eq!(
-            normalize_github_domain("Company.GHE.Com").unwrap(),
-            "company.ghe.com"
+            normalize_github_domain("GHE.Example.Com").unwrap(),
+            "ghe.example.com"
         );
 
         // 剥离尾斜杠和 path
         assert_eq!(
-            normalize_github_domain("company.ghe.com/").unwrap(),
-            "company.ghe.com"
+            normalize_github_domain("ghe.example.com/").unwrap(),
+            "ghe.example.com"
         );
         assert_eq!(
-            normalize_github_domain("company.ghe.com/api/v3").unwrap(),
-            "company.ghe.com"
+            normalize_github_domain("ghe.example.com/api/v3").unwrap(),
+            "ghe.example.com"
         );
 
         // 剥离 query 和 fragment
         assert_eq!(
-            normalize_github_domain("company.ghe.com?foo=bar").unwrap(),
-            "company.ghe.com"
+            normalize_github_domain("ghe.example.com?foo=bar").unwrap(),
+            "ghe.example.com"
         );
         assert_eq!(
-            normalize_github_domain("company.ghe.com#section").unwrap(),
-            "company.ghe.com"
+            normalize_github_domain("ghe.example.com#section").unwrap(),
+            "ghe.example.com"
         );
 
         // 保留端口
         assert_eq!(
-            normalize_github_domain("company.ghe.com:8443").unwrap(),
-            "company.ghe.com:8443"
+            normalize_github_domain("ghe.example.com:8443").unwrap(),
+            "ghe.example.com:8443"
         );
 
         // 拒绝 userinfo
-        assert!(normalize_github_domain("user@company.ghe.com").is_err());
+        assert!(normalize_github_domain("user@ghe.example.com").is_err());
 
         // 拒绝空输入
         assert!(normalize_github_domain("").is_err());
@@ -2064,8 +2064,8 @@ mod tests {
 
         // GHES 使用复合格式
         assert_eq!(
-            composite_account_id("company.ghe.com", 12345),
-            "company.ghe.com:12345"
+            composite_account_id("ghe.example.com", 12345),
+            "ghe.example.com:12345"
         );
 
         // 不同 GHES 实例，相同 user ID，不冲突
@@ -2085,10 +2085,10 @@ mod tests {
                 avatar_url: None,
             },
             authenticated_at: 1700000000,
-            github_domain: "company.ghe.com".to_string(),
+            github_domain: "ghe.example.com".to_string(),
         };
 
         let account = GitHubAccount::from(&data);
-        assert_eq!(account.id, "company.ghe.com:99999");
+        assert_eq!(account.id, "ghe.example.com:99999");
     }
 }
