@@ -23,6 +23,7 @@ import {
   setMcpServerEnabled,
   upsertMcpServer,
   deleteMcpServer,
+  setLiveProviderIds,
 } from "./state";
 
 const TAURI_ENDPOINT = "http://tauri.local";
@@ -67,6 +68,86 @@ export const handlers = [
   ),
 
   http.post(`${TAURI_ENDPOINT}/update_tray_menu`, () => success(true)),
+
+  http.post(
+    `${TAURI_ENDPOINT}/quick_setup_company_key`,
+    async ({ request }) => {
+      const { request: payload } = await withJson<{
+        request: {
+          apiKey?: string;
+          confirmOverwrite?: boolean;
+          apps?: AppId[];
+        };
+      }>(request);
+
+      if (!payload?.apiKey) {
+        return success({
+          status: "failed",
+          existingConfigs: [],
+          appResults: [
+            {
+              app: "company",
+              status: "failed",
+              message: "API key is required",
+            },
+          ],
+          warnings: [],
+          restartRequiredApps: [],
+        });
+      }
+
+      const apps = payload.apps?.length ? payload.apps : ["codex", "opencode"];
+      if (!payload.confirmOverwrite && apps.includes("codex")) {
+        return success({
+          status: "needsConfirmation",
+          existingConfigs: [
+            {
+              app: "codex",
+              kind: "file",
+              label: "Codex config.toml exists",
+              action: "backupAndOverwrite",
+              resolvable: true,
+            },
+          ],
+          appResults: [],
+          warnings: [],
+          restartRequiredApps: [],
+        });
+      }
+
+      if (apps.includes("codex")) {
+        addProvider("codex", {
+          id: "company-gateway",
+          name: "Company Gateway",
+          settingsConfig: {},
+          category: "custom",
+        });
+        setCurrentProviderId("codex", "company-gateway");
+      }
+      if (apps.includes("opencode")) {
+        addProvider("opencode", {
+          id: "company-gateway",
+          name: "Company Gateway",
+          settingsConfig: {},
+          category: "custom",
+        });
+        setLiveProviderIds("opencode", ["company-gateway"]);
+      }
+
+      return success({
+        status: "configured",
+        existingConfigs: [],
+        appResults: apps.map((app) => ({
+          app,
+          status: "success",
+          message: `${app} configured`,
+        })),
+        warnings: [],
+        backupPath: "/mock/backups/company-quick-setup",
+        restartRequiredApps: apps,
+      });
+    },
+  ),
 
   http.post(`${TAURI_ENDPOINT}/get_opencode_live_provider_ids`, () =>
     success(getLiveProviderIds("opencode")),

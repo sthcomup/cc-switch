@@ -1,0 +1,940 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CC Switch 公司密钥配置桌面端流程</title>
+    <style>
+      :root {
+        --background: 0 0% 100%;
+        --foreground: 240 10% 3.9%;
+        --card: 0 0% 100%;
+        --card-foreground: 240 10% 3.9%;
+        --primary: 210 100% 56%;
+        --primary-foreground: 0 0% 100%;
+        --muted: 240 4.8% 95.9%;
+        --muted-foreground: 240 3.8% 46.1%;
+        --border: 240 5.9% 90%;
+        --input: 240 5.9% 90%;
+        --destructive: 0 84.2% 60.2%;
+        --radius: 0.5rem;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        background:
+          radial-gradient(circle at 20% 0%, hsl(var(--primary) / 0.08), transparent 28rem),
+          hsl(var(--background));
+        color: hsl(var(--foreground));
+        font-family:
+          ui-sans-serif,
+          system-ui,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        font-size: 14px;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        cursor: pointer;
+      }
+
+      button:focus-visible,
+      input:focus-visible,
+      summary:focus-visible {
+        outline: 2px solid hsl(var(--primary));
+        outline-offset: 2px;
+      }
+
+      .page {
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      .top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 18px;
+      }
+
+      .top h1 {
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.25;
+        letter-spacing: 0;
+      }
+
+      .top p {
+        margin: 6px 0 0;
+        max-width: 760px;
+        color: hsl(var(--muted-foreground));
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .button {
+        min-height: 36px;
+        border: 1px solid hsl(var(--border));
+        border-radius: 8px;
+        background: hsl(var(--card));
+        color: hsl(var(--foreground));
+        padding: 0 13px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        white-space: nowrap;
+        transition:
+          background 160ms ease,
+          border-color 160ms ease,
+          color 160ms ease;
+      }
+
+      .button:hover {
+        background: hsl(var(--muted));
+      }
+
+      .button.primary {
+        border-color: hsl(var(--primary));
+        background: hsl(var(--primary));
+        color: hsl(var(--primary-foreground));
+      }
+
+      .button.primary:hover {
+        background: hsl(var(--primary) / 0.9);
+      }
+
+      .button.ghost {
+        border-color: transparent;
+        background: transparent;
+        color: hsl(var(--muted-foreground));
+      }
+
+      .button.danger {
+        color: hsl(var(--destructive));
+        border-color: hsl(var(--destructive) / 0.24);
+      }
+
+      .story-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 18px;
+      }
+
+      .story-card {
+        border: 1px solid hsl(var(--border));
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(10px);
+        overflow: hidden;
+      }
+
+      .story-card.wide {
+        grid-column: 1 / -1;
+      }
+
+      .story-head {
+        padding: 14px 16px;
+        border-bottom: 1px solid hsl(var(--border));
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .story-head h2 {
+        margin: 0;
+        font-size: 15px;
+        line-height: 1.35;
+        letter-spacing: 0;
+      }
+
+      .story-head p {
+        margin: 4px 0 0;
+        color: hsl(var(--muted-foreground));
+        font-size: 12px;
+      }
+
+      .mock-window {
+        min-height: 420px;
+        padding: 18px;
+        background: hsl(var(--background));
+        position: relative;
+      }
+
+      .window-header {
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        border-bottom: 1px solid hsl(var(--border));
+        margin: -18px -18px 18px;
+        padding: 0 18px;
+        background: hsl(var(--background) / 0.86);
+        backdrop-filter: blur(12px);
+      }
+
+      .window-title {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-weight: 650;
+      }
+
+      .app-mark {
+        width: 24px;
+        height: 24px;
+        display: grid;
+        place-items: center;
+        border-radius: 7px;
+        background: hsl(var(--primary) / 0.12);
+        color: hsl(var(--primary));
+        font-weight: 800;
+        font-size: 12px;
+      }
+
+      .window-actions {
+        display: flex;
+        gap: 6px;
+      }
+
+      .dot-button {
+        width: 26px;
+        height: 26px;
+        border: 0;
+        border-radius: 7px;
+        background: transparent;
+        color: hsl(var(--muted-foreground));
+      }
+
+      .dot-button:hover {
+        background: hsl(var(--muted));
+      }
+
+      .panel {
+        border: 1px solid hsl(var(--border));
+        border-radius: 12px;
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(20px);
+        padding: 18px;
+      }
+
+      .panel.compact {
+        padding: 14px;
+      }
+
+      .panel h3 {
+        margin: 0;
+        font-size: 17px;
+        line-height: 1.35;
+      }
+
+      .panel p {
+        margin: 6px 0 0;
+        color: hsl(var(--muted-foreground));
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .flow-rail {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 14px;
+      }
+
+      .flow-chip {
+        display: inline-flex;
+        align-items: center;
+        min-height: 24px;
+        padding: 0 9px;
+        border: 1px solid hsl(var(--border));
+        border-radius: 999px;
+        background: hsl(var(--card));
+        color: hsl(var(--muted-foreground));
+        font-size: 11px;
+      }
+
+      .flow-chip.active {
+        color: hsl(var(--primary));
+        border-color: hsl(var(--primary) / 0.3);
+        background: hsl(var(--primary) / 0.08);
+      }
+
+      .flow-chip.done {
+        color: #15803d;
+        border-color: #bbf7d0;
+        background: #f0fdf4;
+      }
+
+      .input-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .input {
+        min-height: 40px;
+        border: 1px solid hsl(var(--input));
+        border-radius: 8px;
+        background: hsl(var(--background));
+        color: hsl(var(--foreground));
+        padding: 0 11px;
+      }
+
+      .hint {
+        margin-top: 10px;
+        color: hsl(var(--muted-foreground));
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .subtle-block {
+        margin-top: 12px;
+        border: 1px solid hsl(var(--border));
+        border-radius: 10px;
+        background: hsl(var(--muted) / 0.58);
+        padding: 11px 12px;
+        color: hsl(var(--muted-foreground));
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .subtle-block.warn {
+        color: #92400e;
+        border-color: #fcd9a8;
+        background: #fff7ed;
+      }
+
+      .subtle-block.ok {
+        color: #166534;
+        border-color: #bbf7d0;
+        background: #f0fdf4;
+      }
+
+      .spinner {
+        display: inline-block;
+        width: 18px;
+        height: 18px;
+        border: 2px solid hsl(var(--primary) / 0.22);
+        border-top-color: hsl(var(--primary));
+        border-radius: 999px;
+        margin-right: 8px;
+        vertical-align: -4px;
+        animation: spin 0.8s linear infinite;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 22px;
+        padding: 0 8px;
+        border-radius: 999px;
+        border: 1px solid hsl(var(--border));
+        background: hsl(var(--card));
+        color: hsl(var(--muted-foreground));
+        font-size: 12px;
+        white-space: nowrap;
+      }
+
+      .badge.ok {
+        color: #15803d;
+        border-color: #bbf7d0;
+        background: #f0fdf4;
+      }
+
+      .badge.warn {
+        color: #b45309;
+        border-color: #fed7aa;
+        background: #fff7ed;
+      }
+
+      .badge.info {
+        color: #0369a1;
+        border-color: #bae6fd;
+        background: #f0f9ff;
+      }
+
+      .badge.danger {
+        color: #b42318;
+        border-color: #fecaca;
+        background: #fff1f2;
+      }
+
+      .result-list {
+        display: grid;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .result-row {
+        display: grid;
+        grid-template-columns: 22px minmax(0, 1fr) auto;
+        align-items: center;
+        gap: 9px;
+        border: 1px solid hsl(var(--border));
+        border-radius: 10px;
+        background: hsl(var(--card));
+        padding: 10px;
+      }
+
+      .result-icon {
+        width: 20px;
+        height: 20px;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        color: #fff;
+        font-size: 12px;
+        font-weight: 800;
+      }
+
+      .result-icon.ok {
+        background: #15803d;
+      }
+
+      .result-icon.warn {
+        background: #b45309;
+      }
+
+      .result-icon.info {
+        background: #0369a1;
+      }
+
+      .result-icon.danger {
+        background: #b42318;
+      }
+
+      .result-row strong {
+        display: block;
+        font-size: 12px;
+      }
+
+      .result-row span {
+        display: block;
+        margin-top: 2px;
+        color: hsl(var(--muted-foreground));
+        font-size: 11px;
+      }
+
+      .action-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 14px;
+      }
+
+      .action-row.end {
+        justify-content: flex-end;
+      }
+
+      .progress-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 14px;
+      }
+
+      .progress-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 90px;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .progress-row strong {
+        font-size: 12px;
+      }
+
+      .bar {
+        height: 7px;
+        border-radius: 999px;
+        background: hsl(var(--muted));
+        overflow: hidden;
+        margin-top: 6px;
+      }
+
+      .bar span {
+        display: block;
+        height: 100%;
+        border-radius: inherit;
+        background: hsl(var(--primary));
+      }
+
+      .custom-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 9px;
+        margin-top: 14px;
+      }
+
+      .check-card {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr);
+        gap: 8px;
+        align-items: start;
+        border: 1px solid hsl(var(--border));
+        border-radius: 10px;
+        background: hsl(var(--card));
+        padding: 10px;
+        font-size: 12px;
+      }
+
+      .field-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        margin-top: 12px;
+      }
+
+      .field {
+        display: grid;
+        gap: 6px;
+      }
+
+      .field label {
+        font-size: 12px;
+        font-weight: 650;
+      }
+
+      .toast {
+        position: absolute;
+        right: 18px;
+        bottom: 18px;
+        width: min(340px, calc(100% - 36px));
+        border: 1px solid #bbf7d0;
+        border-radius: 10px;
+        background: #f0fdf4;
+        color: #14532d;
+        padding: 10px 12px;
+        font-size: 12px;
+        line-height: 1.45;
+        box-shadow: 0 12px 34px rgba(15, 23, 42, 0.14);
+      }
+
+      .toast.warn {
+        border-color: #fed7aa;
+        background: #fff7ed;
+        color: #7c2d12;
+      }
+
+      .dialog-backdrop {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: rgba(15, 23, 42, 0.32);
+        padding: 18px;
+      }
+
+      .dialog {
+        width: min(460px, 100%);
+        border: 1px solid hsl(var(--border));
+        border-radius: 12px;
+        background: hsl(var(--card));
+        box-shadow: 0 20px 64px rgba(15, 23, 42, 0.18);
+      }
+
+      .dialog-head {
+        padding: 15px 16px;
+        border-bottom: 1px solid hsl(var(--border));
+      }
+
+      .dialog-head h4 {
+        margin: 0;
+        font-size: 15px;
+      }
+
+      .dialog-head p {
+        margin: 5px 0 0;
+        color: hsl(var(--muted-foreground));
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .dialog-body {
+        padding: 14px 16px;
+      }
+
+      .dialog-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 0 16px 16px;
+      }
+
+      .interaction-note {
+        border-top: 1px solid hsl(var(--border));
+        padding: 12px 14px;
+        color: hsl(var(--muted-foreground));
+        background: hsl(var(--muted) / 0.42);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      @media (max-width: 1100px) {
+        .story-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 680px) {
+        .page {
+          padding: 14px;
+        }
+
+        .top,
+        .window-header {
+          align-items: flex-start;
+          flex-direction: column;
+        }
+
+        .input-row,
+        .field-grid,
+        .custom-grid,
+        .progress-row {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="top">
+        <div>
+          <h1>公司密钥配置桌面端流程</h1>
+          <p>
+            去掉左侧导航后的版本。每张卡片模拟 CC Switch 的全屏面板内容区：玻璃感容器、轻边框、蓝色主操作、紧凑状态提示。
+          </p>
+        </div>
+        <button class="button primary" type="button" data-jump-demo>回到入口</button>
+      </header>
+
+      <section class="story-grid" aria-label="桌面端流程分镜">
+        <article class="story-card" id="screen-entry">
+          <div class="story-head">
+            <div>
+              <h2>01 初始页：只输入密钥</h2>
+              <p>首屏不放应用选择和检测项。</p>
+            </div>
+            <span class="badge info">默认入口</span>
+          </div>
+          <div class="mock-window">
+            <div class="window-header">
+              <div class="window-title"><span class="app-mark">C</span>公司一键配置</div>
+              <div class="window-actions">
+                <button class="dot-button" type="button">−</button>
+                <button class="dot-button" type="button">×</button>
+              </div>
+            </div>
+            <div class="flow-rail">
+              <span class="flow-chip active">输入密钥</span>
+              <span class="flow-chip">验证</span>
+              <span class="flow-chip">确认</span>
+              <span class="flow-chip">写入</span>
+              <span class="flow-chip">完成</span>
+            </div>
+            <section class="panel">
+              <h3>输入公司 API Key</h3>
+              <p>CC Switch 会自动验证密钥，并配置 GPT/Codex 和 OpenCode。</p>
+              <div class="input-row">
+                <input class="input" type="password" placeholder="粘贴公司 API Key" />
+                <button class="button primary" type="button">验证并配置</button>
+              </div>
+              <div class="hint">初版默认只配置 GPT/Codex 和 OpenCode；已有配置时会先确认。</div>
+              <details class="subtle-block">
+                <summary>自定义配置</summary>
+                <div style="margin-top: 8px">选择具体应用、端点、模型和 Windows 环境变量处理。</div>
+              </details>
+            </section>
+          </div>
+          <div class="interaction-note">交互：空输入点击主按钮时聚焦输入框；输入后进入验证页。</div>
+        </article>
+
+        <article class="story-card" id="screen-validating">
+          <div class="story-head">
+            <div>
+              <h2>02 验证页：自动校验密钥</h2>
+              <p>不展示底层 API 和模型细节。</p>
+            </div>
+            <span class="badge info">Loading</span>
+          </div>
+          <div class="mock-window">
+            <div class="window-header">
+              <div class="window-title"><span class="app-mark">C</span>公司一键配置</div>
+              <div class="window-actions"><button class="dot-button" type="button">×</button></div>
+            </div>
+            <div class="flow-rail">
+              <span class="flow-chip done">输入密钥</span>
+              <span class="flow-chip active">验证</span>
+              <span class="flow-chip">确认</span>
+              <span class="flow-chip">写入</span>
+              <span class="flow-chip">完成</span>
+            </div>
+            <section class="panel">
+              <h3><span class="spinner"></span>正在验证密钥</h3>
+              <p>正在连接公司网关并确认模型访问权限。验证失败不会改动任何本地配置。</p>
+              <div class="subtle-block">通常只需要几秒。此时可以取消并返回输入页。</div>
+              <div class="action-row">
+                <button class="button" type="button">取消</button>
+              </div>
+            </section>
+          </div>
+          <div class="interaction-note">交互：验证成功且无冲突直接进入写入页；有已有配置进入确认页。</div>
+        </article>
+
+        <article class="story-card" id="screen-confirm">
+          <div class="story-head">
+            <div>
+              <h2>03 确认页：本机已有配置</h2>
+              <p>只在会替换现有 live 配置时出现。</p>
+            </div>
+            <span class="badge warn">需确认</span>
+          </div>
+          <div class="mock-window">
+            <div class="window-header">
+              <div class="window-title"><span class="app-mark">C</span>公司一键配置</div>
+              <div class="window-actions"><button class="dot-button" type="button">×</button></div>
+            </div>
+            <div class="flow-rail">
+              <span class="flow-chip done">输入密钥</span>
+              <span class="flow-chip done">验证</span>
+              <span class="flow-chip active">确认</span>
+              <span class="flow-chip">写入</span>
+              <span class="flow-chip">完成</span>
+            </div>
+            <section class="panel">
+              <h3>检测到已有配置</h3>
+              <p>确认后会先备份，再把默认应用改为公司配置。</p>
+              <div class="result-list">
+                <div class="result-row">
+                  <span class="result-icon warn">!</span>
+                  <div><strong>GPT / Codex</strong><span>已存在 auth.json / config.toml，将备份后写入</span></div>
+                  <span class="badge warn">将更新</span>
+                </div>
+                <div class="result-row">
+                  <span class="result-icon ok">✓</span>
+                  <div><strong>OpenCode</strong><span>未发现公司 provider，将直接追加</span></div>
+                  <span class="badge ok">安全追加</span>
+                </div>
+              </div>
+              <div class="action-row">
+                <button class="button primary" type="button">确认改为公司配置</button>
+                <button class="button" type="button">选择要修改的应用</button>
+                <button class="button ghost" type="button">取消</button>
+              </div>
+            </section>
+            <div class="toast warn">旧配置会备份，不会删除旧供应商。</div>
+          </div>
+          <div class="interaction-note">交互：主按钮确认默认推荐项；次按钮进入自定义配置页。</div>
+        </article>
+
+        <article class="story-card" id="screen-custom">
+          <div class="story-head">
+            <div>
+              <h2>04 自定义页：高级路径</h2>
+              <p>只在用户主动展开或选择修改范围时出现。</p>
+            </div>
+            <span class="badge">高级</span>
+          </div>
+          <div class="mock-window">
+            <div class="window-header">
+              <div class="window-title"><span class="app-mark">C</span>自定义配置</div>
+              <button class="button ghost" type="button">返回</button>
+            </div>
+            <section class="panel">
+              <h3>选择要配置的应用</h3>
+              <p>默认值已按公司推荐填好。</p>
+              <div class="custom-grid">
+                <label class="check-card"><input type="checkbox" /> Claude Code</label>
+                <label class="check-card"><input type="checkbox" checked /> GPT / Codex</label>
+                <label class="check-card"><input type="checkbox" checked /> OpenCode</label>
+                <label class="check-card"><input type="checkbox" /> Gemini CLI</label>
+                <label class="check-card"><input type="checkbox" /> OpenClaw</label>
+                <label class="check-card"><input type="checkbox" /> Hermes</label>
+              </div>
+              <div class="field-grid">
+                <div class="field">
+                  <label>公司网关地址</label>
+                  <input class="input" value="https://api.company.example/v1" />
+                </div>
+                <div class="field">
+                  <label>默认模型</label>
+                  <input class="input" value="gpt-5.5" />
+                </div>
+              </div>
+              <div class="subtle-block warn">Windows 检测：发现用户级 OPENAI_API_KEY，可能覆盖 Codex 配置。</div>
+              <label class="check-card"><input type="checkbox" /> 备份后移除用户级环境变量冲突</label>
+              <div class="action-row end">
+                <button class="button" type="button">取消</button>
+                <button class="button primary" type="button">按选择配置</button>
+              </div>
+            </section>
+          </div>
+          <div class="interaction-note">交互：逐项检测只放在自定义页，不进入普通用户默认路径。</div>
+        </article>
+
+        <article class="story-card" id="screen-writing">
+          <div class="story-head">
+            <div>
+              <h2>05 写入页：应用级进度</h2>
+              <p>桌面端任务进度，不展示文件 diff。</p>
+            </div>
+            <span class="badge info">进行中</span>
+          </div>
+          <div class="mock-window">
+            <div class="window-header">
+              <div class="window-title"><span class="app-mark">C</span>正在配置</div>
+              <div class="window-actions"><button class="dot-button" type="button">−</button></div>
+            </div>
+            <div class="flow-rail">
+              <span class="flow-chip done">输入密钥</span>
+              <span class="flow-chip done">验证</span>
+              <span class="flow-chip done">确认</span>
+              <span class="flow-chip active">写入</span>
+              <span class="flow-chip">完成</span>
+            </div>
+            <section class="panel">
+              <h3>正在写入本地配置</h3>
+              <p>已创建备份，正在配置各命令行工具。</p>
+              <div class="progress-list">
+                <div class="progress-row">
+                  <div><strong>创建备份</strong><div class="bar"><span style="width: 100%"></span></div></div>
+                  <span class="badge ok">完成</span>
+                </div>
+                <div class="progress-row">
+                  <div><strong>GPT / Codex auth.json + config.toml</strong><div class="bar"><span style="width: 68%"></span></div></div>
+                  <span class="badge info">写入中</span>
+                </div>
+                <div class="progress-row">
+                  <div><strong>OpenCode provider</strong><div class="bar"><span style="width: 0%"></span></div></div>
+                  <span class="badge">等待</span>
+                </div>
+              </div>
+              <div class="subtle-block">可以最小化窗口；完成后会提示哪些工具需要打开新终端。</div>
+            </section>
+          </div>
+          <div class="interaction-note">交互：失败时停止后续写入、回滚已写入项，并进入失败页。</div>
+        </article>
+
+        <article class="story-card" id="screen-success">
+          <div class="story-head">
+            <div>
+              <h2>06 完成页：明确下一步</h2>
+              <p>主操作是打开终端。</p>
+            </div>
+            <span class="badge ok">完成</span>
+          </div>
+          <div class="mock-window">
+            <div class="window-header">
+              <div class="window-title"><span class="app-mark">C</span>配置完成</div>
+              <div class="window-actions"><button class="dot-button" type="button">×</button></div>
+            </div>
+            <section class="panel">
+              <h3>配置完成</h3>
+              <p>公司供应商已配置到 GPT/Codex 和 OpenCode。请打开新终端后使用。</p>
+              <div class="result-list">
+                <div class="result-row">
+                  <span class="result-icon ok">✓</span>
+                  <div><strong>GPT / Codex</strong><span>auth.json 和 config.toml 已写入</span></div>
+                  <span class="badge info">新终端生效</span>
+                </div>
+                <div class="result-row">
+                  <span class="result-icon ok">✓</span>
+                  <div><strong>OpenCode</strong><span>已追加 company-gateway provider</span></div>
+                  <span class="badge info">新终端生效</span>
+                </div>
+              </div>
+              <div class="action-row">
+                <button class="button primary" type="button">打开终端</button>
+                <button class="button" type="button">查看配置目录</button>
+                <button class="button ghost" type="button">重新配置</button>
+              </div>
+            </section>
+            <div class="toast">已更新托盘菜单。Codex / OpenCode 请打开新终端后使用。</div>
+          </div>
+          <div class="interaction-note">交互：完成页避免技术噪声，只说是否生效和下一步。</div>
+        </article>
+
+        <article class="story-card wide" id="screen-failure">
+          <div class="story-head">
+            <div>
+              <h2>07 失败页与确认弹窗</h2>
+              <p>错误需要说明失败应用、回滚状态和用户下一步。</p>
+            </div>
+            <span class="badge danger">失败态</span>
+          </div>
+          <div class="mock-window">
+            <div class="window-header">
+              <div class="window-title"><span class="app-mark">C</span>配置失败</div>
+              <div class="window-actions"><button class="dot-button" type="button">×</button></div>
+            </div>
+            <section class="panel">
+              <h3>Codex 配置写入失败</h3>
+              <p>目标文件被其它程序占用。已恢复修改前的 auth.json；OpenCode 尚未写入。</p>
+              <div class="result-list">
+                <div class="result-row">
+                  <span class="result-icon ok">✓</span>
+                  <div><strong>备份</strong><span>C:\Users\Alice\.cc-switch\backups\quick-setup-20260525</span></div>
+                  <span class="badge ok">保留</span>
+                </div>
+                <div class="result-row">
+                  <span class="result-icon danger">×</span>
+                  <div><strong>GPT / Codex</strong><span>config.toml 写入失败，已停止后续应用写入</span></div>
+                  <span class="badge danger">失败</span>
+                </div>
+              </div>
+              <div class="action-row">
+                <button class="button primary" type="button">重试</button>
+                <button class="button" type="button">打开备份目录</button>
+                <button class="button ghost" type="button">返回</button>
+              </div>
+            </section>
+            <div class="dialog-backdrop">
+              <div class="dialog" role="dialog" aria-label="环境变量确认">
+                <div class="dialog-head">
+                  <h4>检测到环境变量冲突</h4>
+                  <p>用户级 OPENAI_API_KEY 可能覆盖 Codex 配置。是否先备份并移除此变量？</p>
+                </div>
+                <div class="dialog-body">
+                  <div class="subtle-block warn">来源：HKEY_CURRENT_USER\Environment。系统级变量只提示，不默认删除。</div>
+                </div>
+                <div class="dialog-actions">
+                  <button class="button" type="button">保留</button>
+                  <button class="button primary" type="button">备份后移除</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="interaction-note">交互：确认弹窗只在阻碍默认成功路径时出现；失败页必须明确“已回滚/未回滚”。</div>
+        </article>
+      </section>
+    </main>
+
+    <script>
+      document.querySelector("[data-jump-demo]").addEventListener("click", () => {
+        document.querySelector("#screen-entry").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    </script>
+  </body>
+</html>

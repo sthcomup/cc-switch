@@ -1046,6 +1046,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::get_providers,
             commands::get_current_provider,
+            commands::quick_setup_company_key,
             commands::add_provider,
             commands::update_provider,
             commands::delete_provider,

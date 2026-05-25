@@ -1,6 +1,7 @@
 pub mod balance;
 pub mod codex_oauth_models;
 pub mod coding_plan;
+pub mod company_quick_setup;
 pub mod config;
 pub mod env_checker;
 pub mod env_manager;
@@ -24,6 +25,9 @@ pub mod webdav;
 pub mod webdav_auto_sync;
 pub mod webdav_sync;
 
+pub use company_quick_setup::{
+    CompanyKeySetupRequest, CompanyKeySetupResult, CompanyQuickSetupService,
+};
 pub use config::ConfigService;
 pub use mcp::McpService;
 pub use omo::OmoService;

@@ -1,5 +1,6 @@
 export type { AppId } from "./types";
 export { providersApi, universalProvidersApi } from "./providers";
+export { companyQuickSetupApi } from "./companyQuickSetup";
 export { settingsApi } from "./settings";
 export { backupsApi } from "./settings";
 export { mcpApi } from "./mcp";
@@ -16,6 +17,12 @@ export * as configApi from "./config";
 export * as authApi from "./auth";
 export * as copilotApi from "./copilot";
 export type { ProviderSwitchEvent } from "./providers";
+export type {
+  CompanyKeySetupRequest,
+  CompanyKeySetupResult,
+  ExistingConfig,
+  AppSetupResult,
+} from "./companyQuickSetup";
 export type { Prompt } from "./prompts";
 export type {
   CopilotDeviceCodeResponse,

@@ -60,6 +60,7 @@ import { AppSwitcher } from "@/components/AppSwitcher";
 import { ProviderList } from "@/components/providers/ProviderList";
 import { AddProviderDialog } from "@/components/providers/AddProviderDialog";
 import { EditProviderDialog } from "@/components/providers/EditProviderDialog";
+import { CompanyKeySetupPanel } from "@/components/quick-setup/CompanyKeySetupPanel";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { UpdateBadge } from "@/components/UpdateBadge";
@@ -170,6 +171,7 @@ function App() {
   const [currentView, setCurrentView] = useState<View>(getInitialView);
   const [settingsDefaultTab, setSettingsDefaultTab] = useState("general");
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isCompanySetupOpen, setIsCompanySetupOpen] = useState(false);
   const [isWindowMaximized, setIsWindowMaximized] = useState(false);
 
   useEffect(() => {
@@ -1044,6 +1046,7 @@ function App() {
                         activeApp === "claude" ? handleOpenTerminal : undefined
                       }
                       onCreate={() => setIsAddOpen(true)}
+                      onQuickSetup={() => setIsCompanySetupOpen(true)}
                       onSetAsDefault={
                         activeApp === "openclaw"
                           ? setAsDefaultModel
@@ -1596,6 +1599,17 @@ function App() {
         onOpenChange={setIsAddOpen}
         appId={activeApp}
         onSubmit={addProvider}
+      />
+
+      <CompanyKeySetupPanel
+        open={isCompanySetupOpen}
+        onOpenChange={setIsCompanySetupOpen}
+        onConfigured={() => {
+          void queryClient.invalidateQueries({ queryKey: ["providers"] });
+          void queryClient.invalidateQueries({
+            queryKey: ["opencodeLiveProviderIds"],
+          });
+        }}
       />
 
       <EditProviderDialog

@@ -1,4 +1,4 @@
-import { Download, Users } from "lucide-react";
+import { Download, KeyRound, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import type { AppId } from "@/lib/api/types";
@@ -7,16 +7,20 @@ interface ProviderEmptyStateProps {
   appId: AppId;
   onCreate?: () => void;
   onImport?: () => void;
+  onQuickSetup?: () => void;
 }
 
 export function ProviderEmptyState({
   appId,
   onCreate,
   onImport,
+  onQuickSetup,
 }: ProviderEmptyStateProps) {
   const { t } = useTranslation();
   const showSnippetHint =
     appId === "claude" || appId === "codex" || appId === "gemini";
+  const showQuickSetup =
+    onQuickSetup && (appId === "codex" || appId === "opencode");
 
   return (
     <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border p-10 text-center">
@@ -33,8 +37,19 @@ export function ProviderEmptyState({
         </p>
       )}
       <div className="mt-6 flex flex-col gap-2">
+        {showQuickSetup && (
+          <Button onClick={onQuickSetup}>
+            <KeyRound className="mr-2 h-4 w-4" />
+            {t("provider.companyQuickSetup", {
+              defaultValue: "使用公司 API Key 配置",
+            })}
+          </Button>
+        )}
         {onImport && (
-          <Button onClick={onImport}>
+          <Button
+            variant={showQuickSetup ? "outline" : "default"}
+            onClick={onImport}
+          >
             <Download className="mr-2 h-4 w-4" />
             {appId === "claude-desktop"
               ? t("provider.importFromClaude", {
@@ -44,7 +59,10 @@ export function ProviderEmptyState({
           </Button>
         )}
         {onCreate && (
-          <Button variant={onImport ? "outline" : "default"} onClick={onCreate}>
+          <Button
+            variant={onImport || showQuickSetup ? "outline" : "default"}
+            onClick={onCreate}
+          >
             {t("provider.addProvider")}
           </Button>
         )}

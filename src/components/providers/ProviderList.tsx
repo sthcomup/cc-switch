@@ -13,7 +13,7 @@ import {
   type CSSProperties,
 } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Search, X } from "lucide-react";
+import { AlertTriangle, KeyRound, Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -63,6 +63,7 @@ interface ProviderListProps {
   onOpenWebsite: (url: string) => void;
   onOpenTerminal?: (provider: Provider) => void;
   onCreate?: () => void;
+  onQuickSetup?: () => void;
   isLoading?: boolean;
   isProxyRunning?: boolean; // 代理服务运行状态
   isProxyTakeover?: boolean; // 代理接管模式（Live配置已被接管）
@@ -85,6 +86,7 @@ export function ProviderList({
   onOpenWebsite,
   onOpenTerminal,
   onCreate,
+  onQuickSetup,
   isLoading = false,
   isProxyRunning = false,
   isProxyTakeover = false,
@@ -389,6 +391,7 @@ export function ProviderList({
       <ProviderEmptyState
         appId={appId}
         onCreate={onCreate}
+        onQuickSetup={onQuickSetup}
         onImport={() => importMutation.mutate()}
       />
     );
@@ -470,6 +473,16 @@ export function ProviderList({
 
   return (
     <div className="mt-4 space-y-4">
+      {onQuickSetup && (appId === "codex" || appId === "opencode") && (
+        <div className="flex justify-end">
+          <Button variant="secondary" onClick={onQuickSetup}>
+            <KeyRound className="mr-2 h-4 w-4" />
+            {t("provider.companyQuickSetup", {
+              defaultValue: "公司一键配置",
+            })}
+          </Button>
+        </div>
+      )}
       {claudeDesktopStatusMessages.length > 0 && (
         <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
           <div className="flex items-center gap-2 font-medium">
