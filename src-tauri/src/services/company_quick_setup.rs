@@ -9,7 +9,7 @@ use crate::provider::{
 use crate::proxy::providers::{AuthInfo, AuthStrategy};
 use crate::services::env_checker;
 use crate::services::env_manager;
-use crate::services::provider::ProviderService;
+use crate::services::provider::{read_live_settings, ProviderService};
 use crate::services::stream_check::{StreamCheckConfig, StreamCheckService};
 use crate::store::AppState;
 use serde::{Deserialize, Serialize};
@@ -555,7 +555,8 @@ impl CompanyQuickSetupService {
     ) -> Result<Vec<AppSetupResult>, AppError> {
         let mut results = Vec::new();
         if apps.contains(&AppType::Codex) {
-            let provider = Self::build_codex_provider(api_key, base_url, model);
+            let mut provider = Self::build_codex_provider(api_key, base_url, model);
+            Self::preserve_codex_common_config(state, &mut provider)?;
             ProviderService::add(state, AppType::Codex, provider, true)?;
             ProviderService::switch(state, AppType::Codex, COMPANY_PROVIDER_ID_CODEX)?;
             results.push(AppSetupResult {
@@ -577,6 +578,58 @@ impl CompanyQuickSetupService {
             });
         }
         Ok(results)
+    }
+
+    fn preserve_codex_common_config(
+        state: &AppState,
+        provider: &mut Provider,
+    ) -> Result<(), AppError> {
+        let snippet = match state.db.get_config_snippet(AppType::Codex.as_str())? {
+            Some(snippet) if Self::is_meaningful_common_config(&snippet) => Some(snippet),
+            _ if state
+                .db
+                .should_auto_extract_config_snippet(AppType::Codex.as_str())? =>
+            {
+                match read_live_settings(AppType::Codex).and_then(|settings| {
+                    ProviderService::extract_common_config_snippet_from_settings(
+                        AppType::Codex,
+                        &settings,
+                    )
+                }) {
+                    Ok(snippet) if Self::is_meaningful_common_config(&snippet) => {
+                        state
+                            .db
+                            .set_config_snippet(AppType::Codex.as_str(), Some(snippet.clone()))?;
+                        state
+                            .db
+                            .set_config_snippet_cleared(AppType::Codex.as_str(), false)?;
+                        Some(snippet)
+                    }
+                    Ok(_) => None,
+                    Err(err) => {
+                        log::warn!(
+                            "[QuickSetup] failed to extract existing Codex common config: {err}"
+                        );
+                        None
+                    }
+                }
+            }
+            _ => None,
+        };
+
+        if snippet.is_some() {
+            provider
+                .meta
+                .get_or_insert_with(ProviderMeta::default)
+                .common_config_enabled = Some(true);
+        }
+
+        Ok(())
+    }
+
+    fn is_meaningful_common_config(snippet: &str) -> bool {
+        let trimmed = snippet.trim();
+        !trimmed.is_empty() && trimmed != "{}"
     }
 
     fn restore_live_files(snapshots: &[FileSnapshot]) -> Result<(), AppError> {
@@ -715,6 +768,10 @@ requires_openai_auth = true
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::database::Database;
+    use crate::services::provider::build_effective_settings_with_common_config;
+    use crate::store::AppState;
+    use std::sync::Arc;
 
     #[test]
     fn normalizes_gateway_to_v1() {
@@ -756,6 +813,49 @@ mod tests {
                 .and_then(|value| value.as_str()),
             Some("sk-secret")
         );
+    }
+
+    #[test]
+    fn codex_quick_setup_provider_reuses_existing_common_config() {
+        let state = AppState::new(Arc::new(Database::memory().expect("memory db")));
+        state
+            .db
+            .set_config_snippet(
+                AppType::Codex.as_str(),
+                Some("[shared]\nreasoning = \"medium\"\n".to_string()),
+            )
+            .expect("set common config");
+
+        let mut provider = CompanyQuickSetupService::build_codex_provider(
+            "sk-secret",
+            "https://catcatcode.com/v1",
+            DEFAULT_MODEL,
+        );
+
+        CompanyQuickSetupService::preserve_codex_common_config(&state, &mut provider)
+            .expect("preserve common config");
+
+        assert_eq!(
+            provider
+                .meta
+                .as_ref()
+                .and_then(|meta| meta.common_config_enabled),
+            Some(true)
+        );
+
+        let effective = build_effective_settings_with_common_config(
+            state.db.as_ref(),
+            &AppType::Codex,
+            &provider,
+        )
+        .expect("build effective settings");
+        let config = effective
+            .get("config")
+            .and_then(|value| value.as_str())
+            .expect("config text");
+        assert!(config.contains("[shared]"));
+        assert!(config.contains("reasoning = \"medium\""));
+        assert!(config.contains("model_provider = \"quick_setup_gateway\""));
     }
 
     #[test]
