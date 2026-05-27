@@ -164,7 +164,11 @@ const getInitialView = (): View => {
 const COMPANY_QUICK_SETUP_ONBOARDING_KEY =
   "cc-switch-quick-setup-onboarding-v2-completed";
 
+const ALWAYS_SHOW_COMPANY_QUICK_SETUP_ONBOARDING = true;
+const ENABLE_ENV_CONFLICT_WARNINGS = false;
+
 const getInitialCompanyOnboardingOpen = (): boolean =>
+  ALWAYS_SHOW_COMPANY_QUICK_SETUP_ONBOARDING ||
   localStorage.getItem(COMPANY_QUICK_SETUP_ONBOARDING_KEY) !== "true";
 
 const logCompanyOnboarding = (
@@ -204,6 +208,13 @@ function App() {
       storedValue: localStorage.getItem(COMPANY_QUICK_SETUP_ONBOARDING_KEY),
       open: isCompanyOnboardingOpen,
     });
+  }, []);
+
+  useEffect(() => {
+    if (!ALWAYS_SHOW_COMPANY_QUICK_SETUP_ONBOARDING) return;
+    logCompanyOnboarding("test mode forces onboarding open on mount");
+    setIsCompanySetupOpen(false);
+    setIsCompanyOnboardingOpen(true);
   }, []);
 
   const { data: settingsData } = useSettingsQuery();
@@ -600,6 +611,8 @@ function App() {
   }, [useAppWindowControls, settingsData]);
 
   useEffect(() => {
+    if (!ENABLE_ENV_CONFLICT_WARNINGS) return;
+
     const checkEnvOnStartup = async () => {
       try {
         const allConflicts = await checkAllEnvConflicts();
@@ -670,6 +683,8 @@ function App() {
   }, [t, queryClient]);
 
   useEffect(() => {
+    if (!ENABLE_ENV_CONFLICT_WARNINGS) return;
+
     const checkEnvOnSwitch = async () => {
       try {
         const conflicts = await checkEnvConflicts(activeApp);
@@ -1213,7 +1228,9 @@ function App() {
           )}
         </div>
       )}
-      {showEnvBanner && envConflicts.length > 0 && (
+      {ENABLE_ENV_CONFLICT_WARNINGS &&
+        showEnvBanner &&
+        envConflicts.length > 0 && (
         <EnvWarningBanner
           conflicts={envConflicts}
           onDismiss={() => {

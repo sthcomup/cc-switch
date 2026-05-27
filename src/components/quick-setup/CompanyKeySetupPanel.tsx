@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   CheckCircle2,
   KeyRound,
   Loader2,
+  RotateCcw,
   Settings2,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -56,10 +57,30 @@ export function CompanyKeySetupPanel({
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [includeCodex, setIncludeCodex] = useState(true);
   const [includeOpenCode, setIncludeOpenCode] = useState(true);
-  const [resolveUserEnvConflicts, setResolveUserEnvConflicts] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   const [step, setStep] = useState<Step>("input");
   const [result, setResult] = useState<CompanyKeySetupResult | null>(null);
+  const wasOpenRef = useRef(open);
+
+  const resetSession = () => {
+    console.info("[QuickSetup][Panel] reset session", { mode });
+    setApiKey("");
+    setBaseUrl(DEFAULT_BASE_URL);
+    setModel(DEFAULT_MODEL);
+    setIncludeCodex(true);
+    setIncludeOpenCode(true);
+    setCustomOpen(false);
+    setStep("input");
+    setResult(null);
+  };
+
+  useEffect(() => {
+    const wasOpen = wasOpenRef.current;
+    wasOpenRef.current = open;
+    if (!wasOpen && open) {
+      resetSession();
+    }
+  }, [open]);
 
   const selectedApps = useMemo(() => {
     const apps: Array<"codex" | "opencode"> = [];
@@ -118,7 +139,6 @@ export function CompanyKeySetupPanel({
       apps: selectedApps,
       baseUrl: customOpen ? baseUrl : DEFAULT_BASE_URL,
       model: customOpen ? model : DEFAULT_MODEL,
-      resolveUserEnvConflicts,
       apiKey: describeApiKey(trimmedKey),
     });
     setStep("applying");
@@ -131,7 +151,7 @@ export function CompanyKeySetupPanel({
         baseUrl: customOpen ? baseUrl : undefined,
         model: customOpen ? model : undefined,
         confirmOverwrite,
-        resolveUserEnvConflicts,
+        resolveUserEnvConflicts: false,
       });
       console.info("[QuickSetup][Panel] response", {
         status: response.status,
@@ -199,6 +219,17 @@ export function CompanyKeySetupPanel({
           <Button variant="outline" onClick={resetForRetry}>
             {t("common.cancel", { defaultValue: "取消" })}
           </Button>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setCustomOpen(true);
+              setStep("input");
+            }}
+          >
+            {t("companyQuickSetup.chooseApps", {
+              defaultValue: "选择要修改的应用",
+            })}
+          </Button>
           <Button onClick={() => void submit(true)}>
             {t("companyQuickSetup.confirm", {
               defaultValue: "确认改为一键配置",
@@ -250,44 +281,10 @@ export function CompanyKeySetupPanel({
       actions={actions}
       showBackButton={mode !== "onboarding"}
     >
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
-        {mode === "onboarding" && (
-          <section className="rounded-xl border border-border bg-muted/20 p-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h3 className="text-base font-semibold">
-                  {t("companyQuickSetup.onboardingTitle", {
-                    defaultValue: "先完成 API Key 配置",
-                  })}
-                </h3>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {t("companyQuickSetup.onboardingDescription", {
-                    defaultValue:
-                      "验证通过后会自动写入 Codex 和 OpenCode，完成后回到原本的配置管理页面。",
-                  })}
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
-                <div className="rounded-lg border border-border bg-background px-3 py-2 text-center">
-                  {t("companyQuickSetup.stepKey", { defaultValue: "粘贴 Key" })}
-                </div>
-                <div className="rounded-lg border border-border bg-background px-3 py-2 text-center">
-                  {t("companyQuickSetup.stepValidate", {
-                    defaultValue: "验证",
-                  })}
-                </div>
-                <div className="rounded-lg border border-border bg-background px-3 py-2 text-center">
-                  {t("companyQuickSetup.stepApply", {
-                    defaultValue: "生效",
-                  })}
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-        <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4">
+        <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
           <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
               {step === "success" ? (
                 <CheckCircle2 className="h-5 w-5" />
               ) : step === "failed" ? (
@@ -305,6 +302,15 @@ export function CompanyKeySetupPanel({
               </p>
             </div>
           </div>
+
+          {step === "input" && (
+            <div className="mt-5 rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-sm text-muted-foreground">
+              {t("companyQuickSetup.defaultScope", {
+                defaultValue:
+                  "默认会验证密钥，并为 Codex 和 OpenCode 写入公司供应商配置。",
+              })}
+            </div>
+          )}
 
           {(step === "input" || step === "applying") && (
             <div className="mt-5 space-y-4">
@@ -338,7 +344,7 @@ export function CompanyKeySetupPanel({
                 })}
               </button>
 
-              {customOpen && (
+              {customOpen && step === "input" && (
                 <div className="grid gap-4 rounded-lg border border-border bg-muted/30 p-4 sm:grid-cols-2">
                   <label className="flex items-center gap-2 text-sm">
                     <Checkbox
@@ -382,20 +388,10 @@ export function CompanyKeySetupPanel({
                       onChange={(event) => setModel(event.target.value)}
                     />
                   </div>
-                  <label className="flex items-center gap-2 text-sm sm:col-span-2">
-                    <Checkbox
-                      checked={resolveUserEnvConflicts}
-                      onCheckedChange={(checked) =>
-                        setResolveUserEnvConflicts(Boolean(checked))
-                      }
-                    />
-                    {t("companyQuickSetup.resolveEnv", {
-                      defaultValue:
-                        "确认后备份并移除用户级 OPENAI_API_KEY 冲突",
-                    })}
-                  </label>
                 </div>
               )}
+
+              {step === "applying" && <SetupProgressPreview />}
             </div>
           )}
 
@@ -409,6 +405,38 @@ export function CompanyKeySetupPanel({
         </section>
       </div>
     </FullScreenPanel>
+  );
+}
+
+function SetupProgressPreview() {
+  const rows = [
+    "验证 API Key",
+    "备份已有配置",
+    "写入 Codex / OpenCode",
+  ];
+
+  return (
+    <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3">
+      {rows.map((label, index) => (
+        <div
+          key={label}
+          className="flex items-center justify-between rounded-md bg-background px-3 py-2 text-sm"
+        >
+          <span>{label}</span>
+          {index === 0 ? (
+            <span className="inline-flex items-center gap-1 text-primary">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              进行中
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-muted-foreground">
+              <RotateCcw className="h-3.5 w-3.5" />
+              等待
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }
 

@@ -14,7 +14,7 @@ use crate::services::stream_check::{StreamCheckConfig, StreamCheckService};
 use crate::store::AppState;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::PathBuf;
 
@@ -23,7 +23,7 @@ const COMPANY_PROVIDER_ID_OPENCODE: &str = "quick-setup-gateway";
 const COMPANY_PROVIDER_NAME: &str = "Quick Setup Gateway";
 const DEFAULT_BASE_URL_DISPLAY: &str = "https://catcatcode.com/";
 const DEFAULT_MODEL: &str = "gpt-5.5";
-const CODEX_MODEL_PROVIDER_ID: &str = "quick_setup_gateway";
+const ENABLE_QUICK_SETUP_ENV_CONFLICT_HANDLING: bool = false;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -128,6 +128,8 @@ impl CompanyKeySetupResult {
 struct DbSnapshot {
     codex_provider: Option<Provider>,
     opencode_provider: Option<Provider>,
+    codex_provider_ids: HashSet<String>,
+    opencode_provider_ids: HashSet<String>,
     codex_current: Option<String>,
 }
 
@@ -247,6 +249,10 @@ impl CompanyQuickSetupService {
             });
         }
 
+        if apps.contains(&AppType::Codex) {
+            Self::import_existing_codex_live_provider(state)?;
+        }
+
         log::info!("[QuickSetup] capturing database snapshot");
         let db_snapshot = Self::capture_db_snapshot(state)?;
         log::info!("[QuickSetup] backing up live config files");
@@ -255,7 +261,7 @@ impl CompanyQuickSetupService {
         log::info!("[QuickSetup] backup created at {:?}", backup_path);
 
         let mut warnings = Vec::new();
-        if request.resolve_user_env_conflicts {
+        if ENABLE_QUICK_SETUP_ENV_CONFLICT_HANDLING && request.resolve_user_env_conflicts {
             log::info!("[QuickSetup] resolving user env conflicts");
             match Self::delete_resolvable_env_conflicts() {
                 Ok(Some(path)) => {
@@ -355,7 +361,8 @@ impl CompanyQuickSetupService {
         base_url: &str,
         model: &str,
     ) -> Result<(), AppError> {
-        let provider = Self::build_codex_provider(api_key, base_url, model);
+        let provider =
+            Self::build_codex_provider(COMPANY_PROVIDER_ID_CODEX, api_key, base_url, model);
         let config = StreamCheckConfig {
             timeout_secs: 20,
             max_retries: 0,
@@ -382,71 +389,44 @@ impl CompanyQuickSetupService {
     }
 
     fn detect_existing_configs(
-        state: &AppState,
+        _state: &AppState,
         apps: &[AppType],
     ) -> Result<Vec<ExistingConfig>, AppError> {
         let mut configs = Vec::new();
         if apps.contains(&AppType::Codex) {
             let auth_path = get_codex_auth_path();
             let config_path = get_codex_config_path();
-            if auth_path.exists() {
-                configs.push(ExistingConfig {
-                    app: "codex".to_string(),
-                    kind: "file".to_string(),
-                    label: "Codex auth.json exists".to_string(),
-                    action: "backupAndOverwrite".to_string(),
-                    source: Some(auth_path.to_string_lossy().to_string()),
-                    resolvable: true,
-                });
+            if auth_path.exists() || config_path.exists() {
+                log::info!(
+                    "[QuickSetup] Codex live config exists; quick setup will import it as a provider before adding a new company provider"
+                );
             }
-            if config_path.exists() {
-                configs.push(ExistingConfig {
-                    app: "codex".to_string(),
-                    kind: "file".to_string(),
-                    label: "Codex config.toml exists".to_string(),
-                    action: "backupAndOverwrite".to_string(),
-                    source: Some(config_path.to_string_lossy().to_string()),
-                    resolvable: true,
-                });
-            }
-            for conflict in env_checker::check_env_conflicts("codex")
-                .map_err(AppError::Message)?
-                .into_iter()
-                .filter(|conflict| conflict.var_name == "OPENAI_API_KEY")
-            {
-                configs.push(ExistingConfig {
-                    app: "codex".to_string(),
-                    kind: "env".to_string(),
-                    label: "OPENAI_API_KEY environment variable exists".to_string(),
-                    action: if conflict.source_path.contains("HKEY_CURRENT_USER") {
-                        "backupAndRemoveIfConfirmed".to_string()
-                    } else {
-                        "warnOnly".to_string()
-                    },
-                    source: Some(conflict.source_path),
-                    resolvable: true,
-                });
+            if ENABLE_QUICK_SETUP_ENV_CONFLICT_HANDLING {
+                for conflict in env_checker::check_env_conflicts("codex")
+                    .map_err(AppError::Message)?
+                    .into_iter()
+                    .filter(|conflict| conflict.var_name == "OPENAI_API_KEY")
+                {
+                    configs.push(ExistingConfig {
+                        app: "codex".to_string(),
+                        kind: "env".to_string(),
+                        label: "OPENAI_API_KEY environment variable exists".to_string(),
+                        action: if conflict.source_path.contains("HKEY_CURRENT_USER") {
+                            "backupAndRemoveIfConfirmed".to_string()
+                        } else {
+                            "warnOnly".to_string()
+                        },
+                        source: Some(conflict.source_path),
+                        resolvable: true,
+                    });
+                }
             }
         }
 
         if apps.contains(&AppType::OpenCode) {
-            let live_exists = opencode_config::get_providers()
-                .map(|providers| providers.contains_key(COMPANY_PROVIDER_ID_OPENCODE))
-                .unwrap_or(false);
-            let db_exists = state
-                .db
-                .get_provider_by_id(COMPANY_PROVIDER_ID_OPENCODE, AppType::OpenCode.as_str())?
-                .is_some();
-            if live_exists || db_exists {
-                configs.push(ExistingConfig {
-                    app: "opencode".to_string(),
-                    kind: "provider".to_string(),
-                    label: "OpenCode quick-setup-gateway provider exists".to_string(),
-                    action: "backupAndOverwrite".to_string(),
-                    source: None,
-                    resolvable: true,
-                });
-            }
+            log::info!(
+                "[QuickSetup] OpenCode quick setup will add a provider with a non-conflicting id"
+            );
         }
 
         Ok(configs)
@@ -476,6 +456,8 @@ impl CompanyQuickSetupService {
             opencode_provider: state
                 .db
                 .get_provider_by_id(COMPANY_PROVIDER_ID_OPENCODE, AppType::OpenCode.as_str())?,
+            codex_provider_ids: state.db.get_provider_ids(AppType::Codex.as_str())?,
+            opencode_provider_ids: state.db.get_provider_ids(AppType::OpenCode.as_str())?,
             codex_current: crate::settings::get_effective_current_provider(
                 &state.db,
                 &AppType::Codex,
@@ -555,29 +537,98 @@ impl CompanyQuickSetupService {
     ) -> Result<Vec<AppSetupResult>, AppError> {
         let mut results = Vec::new();
         if apps.contains(&AppType::Codex) {
-            let mut provider = Self::build_codex_provider(api_key, base_url, model);
+            let provider_id =
+                Self::next_available_provider_id(state, AppType::Codex, COMPANY_PROVIDER_ID_CODEX)?;
+            let mut provider = Self::build_codex_provider(&provider_id, api_key, base_url, model);
             Self::preserve_codex_common_config(state, &mut provider)?;
             ProviderService::add(state, AppType::Codex, provider, true)?;
-            ProviderService::switch(state, AppType::Codex, COMPANY_PROVIDER_ID_CODEX)?;
+            ProviderService::switch(state, AppType::Codex, &provider_id)?;
             results.push(AppSetupResult {
                 app: "codex".to_string(),
                 status: CompanyAppSetupStatus::Success,
-                message: "Codex configured".to_string(),
+                message: format!("Codex configured as new provider '{provider_id}'"),
                 rollback_status: None,
             });
         }
 
         if apps.contains(&AppType::OpenCode) {
-            let provider = Self::build_opencode_provider(api_key, base_url, model);
+            let provider_id = Self::next_available_provider_id(
+                state,
+                AppType::OpenCode,
+                COMPANY_PROVIDER_ID_OPENCODE,
+            )?;
+            let provider = Self::build_opencode_provider(&provider_id, api_key, base_url, model);
             ProviderService::add(state, AppType::OpenCode, provider, true)?;
             results.push(AppSetupResult {
                 app: "opencode".to_string(),
                 status: CompanyAppSetupStatus::Success,
-                message: "OpenCode configured".to_string(),
+                message: format!("OpenCode configured as new provider '{provider_id}'"),
                 rollback_status: None,
             });
         }
         Ok(results)
+    }
+
+    fn import_existing_codex_live_provider(state: &AppState) -> Result<(), AppError> {
+        let live_exists = get_codex_auth_path().exists() || get_codex_config_path().exists();
+        match ProviderService::import_default_config(state, AppType::Codex) {
+            Ok(true) => {
+                log::info!("[QuickSetup] imported existing Codex live config as provider 'default'")
+            }
+            Ok(false) => {
+                let current =
+                    crate::settings::get_effective_current_provider(&state.db, &AppType::Codex)?;
+                if live_exists && current.is_none() {
+                    return Err(AppError::Message(
+                        "Existing Codex config is present but no current CC Switch provider is selected; quick setup will not overwrite it."
+                            .to_string(),
+                    ));
+                }
+                log::debug!(
+                    "[QuickSetup] existing Codex provider already present; live import skipped"
+                );
+            }
+            Err(err) if live_exists => {
+                return Err(AppError::Message(format!(
+                    "Existing Codex config could not be imported, so quick setup will not overwrite it: {err}"
+                )));
+            }
+            Err(err) => log::debug!("[QuickSetup] no importable Codex live config found: {err}"),
+        }
+        Ok(())
+    }
+
+    fn next_available_provider_id(
+        state: &AppState,
+        app_type: AppType,
+        base_id: &str,
+    ) -> Result<String, AppError> {
+        let existing_ids = state.db.get_provider_ids(app_type.as_str())?;
+        if !existing_ids.contains(base_id) {
+            return Ok(base_id.to_string());
+        }
+
+        for index in 2.. {
+            let candidate = format!("{base_id}-{index}");
+            if !existing_ids.contains(&candidate) {
+                return Ok(candidate);
+            }
+        }
+
+        unreachable!("unbounded provider id search should always find a free id")
+    }
+
+    fn codex_model_provider_id(provider_id: &str) -> String {
+        provider_id
+            .chars()
+            .map(|ch| {
+                if ch.is_ascii_alphanumeric() {
+                    ch.to_ascii_lowercase()
+                } else {
+                    '_'
+                }
+            })
+            .collect()
     }
 
     fn preserve_codex_common_config(
@@ -660,6 +711,19 @@ impl CompanyQuickSetupService {
     }
 
     fn restore_db_snapshot(state: &AppState, snapshot: DbSnapshot) -> Result<(), AppError> {
+        Self::delete_new_quick_setup_providers(
+            state,
+            AppType::Codex,
+            COMPANY_PROVIDER_ID_CODEX,
+            &snapshot.codex_provider_ids,
+        )?;
+        Self::delete_new_quick_setup_providers(
+            state,
+            AppType::OpenCode,
+            COMPANY_PROVIDER_ID_OPENCODE,
+            &snapshot.opencode_provider_ids,
+        )?;
+
         match snapshot.codex_provider {
             Some(provider) => state.db.save_provider(AppType::Codex.as_str(), &provider)?,
             None => state
@@ -689,12 +753,33 @@ impl CompanyQuickSetupService {
         Ok(())
     }
 
-    fn build_codex_provider(api_key: &str, base_url: &str, model: &str) -> Provider {
+    fn delete_new_quick_setup_providers(
+        state: &AppState,
+        app_type: AppType,
+        base_id: &str,
+        existing_ids: &HashSet<String>,
+    ) -> Result<(), AppError> {
+        let current_ids = state.db.get_provider_ids(app_type.as_str())?;
+        for provider_id in current_ids {
+            if provider_id.starts_with(base_id) && !existing_ids.contains(&provider_id) {
+                state.db.delete_provider(app_type.as_str(), &provider_id)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn build_codex_provider(
+        provider_id: &str,
+        api_key: &str,
+        base_url: &str,
+        model: &str,
+    ) -> Provider {
+        let model_provider_id = Self::codex_model_provider_id(provider_id);
         let config = format!(
             r#"model = "{model}"
-model_provider = "{CODEX_MODEL_PROVIDER_ID}"
+model_provider = "{model_provider_id}"
 
-[model_providers.{CODEX_MODEL_PROVIDER_ID}]
+[model_providers.{model_provider_id}]
 name = "Quick Setup Gateway"
 base_url = "{base_url}"
 wire_api = "responses"
@@ -702,7 +787,7 @@ requires_openai_auth = true
 "#
         );
         let mut provider = Provider::with_id(
-            COMPANY_PROVIDER_ID_CODEX.to_string(),
+            provider_id.to_string(),
             COMPANY_PROVIDER_NAME.to_string(),
             json!({
                 "auth": { "OPENAI_API_KEY": api_key },
@@ -719,7 +804,12 @@ requires_openai_auth = true
         provider
     }
 
-    fn build_opencode_provider(api_key: &str, base_url: &str, model: &str) -> Provider {
+    fn build_opencode_provider(
+        provider_id: &str,
+        api_key: &str,
+        base_url: &str,
+        model: &str,
+    ) -> Provider {
         let mut models = HashMap::new();
         models.insert(
             model.to_string(),
@@ -742,7 +832,7 @@ requires_openai_auth = true
             models,
         };
         let mut provider = Provider::with_id(
-            COMPANY_PROVIDER_ID_OPENCODE.to_string(),
+            provider_id.to_string(),
             COMPANY_PROVIDER_NAME.to_string(),
             serde_json::to_value(config).unwrap_or_else(|_| json!({})),
             Some(base_url.to_string()),
@@ -793,6 +883,7 @@ mod tests {
     #[test]
     fn codex_provider_uses_quick_setup_defaults() {
         let provider = CompanyQuickSetupService::build_codex_provider(
+            COMPANY_PROVIDER_ID_CODEX,
             "sk-secret",
             "https://catcatcode.com/v1",
             DEFAULT_MODEL,
@@ -827,6 +918,7 @@ mod tests {
             .expect("set common config");
 
         let mut provider = CompanyQuickSetupService::build_codex_provider(
+            COMPANY_PROVIDER_ID_CODEX,
             "sk-secret",
             "https://catcatcode.com/v1",
             DEFAULT_MODEL,
@@ -859,8 +951,47 @@ mod tests {
     }
 
     #[test]
+    fn quick_setup_uses_new_provider_id_when_default_exists() {
+        let state = AppState::new(Arc::new(Database::memory().expect("memory db")));
+        let existing = CompanyQuickSetupService::build_codex_provider(
+            COMPANY_PROVIDER_ID_CODEX,
+            "sk-existing",
+            "https://existing.example/v1",
+            DEFAULT_MODEL,
+        );
+        state
+            .db
+            .save_provider(AppType::Codex.as_str(), &existing)
+            .expect("save existing provider");
+
+        let provider_id = CompanyQuickSetupService::next_available_provider_id(
+            &state,
+            AppType::Codex,
+            COMPANY_PROVIDER_ID_CODEX,
+        )
+        .expect("next id");
+        assert_eq!(provider_id, "quick-setup-gateway-2");
+
+        let provider = CompanyQuickSetupService::build_codex_provider(
+            &provider_id,
+            "sk-secret",
+            "https://catcatcode.com/v1",
+            DEFAULT_MODEL,
+        );
+        assert_eq!(provider.id, "quick-setup-gateway-2");
+        let config = provider
+            .settings_config
+            .get("config")
+            .and_then(|value| value.as_str())
+            .expect("config text");
+        assert!(config.contains("model_provider = \"quick_setup_gateway_2\""));
+        assert!(config.contains("[model_providers.quick_setup_gateway_2]"));
+    }
+
+    #[test]
     fn opencode_provider_deserializes() {
         let provider = CompanyQuickSetupService::build_opencode_provider(
+            COMPANY_PROVIDER_ID_OPENCODE,
             "sk-secret",
             "https://catcatcode.com/v1",
             DEFAULT_MODEL,
